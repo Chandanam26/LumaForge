@@ -1,75 +1,421 @@
-# LumaForge
+# LumaForge — Hybrid Learned Smartphone ISP
 
-**A hybrid learned smartphone ISP: classical camera stages plus a compact neural restorer.**
+<div align="center">
 
-Team Asphalt (T32) · Problem P2: Intelligent and Computationally Efficient Smartphone ISP
+[![CI](https://github.com/Charis-E-Shiny/LumaForge/actions/workflows/ci.yml/badge.svg)](https://github.com/Charis-E-Shiny/LumaForge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-Training-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![ONNX Runtime](https://img.shields.io/badge/ONNX%20Runtime-Inference-005CED?logo=onnx&logoColor=white)](https://onnxruntime.ai/)
+[![NumPy](https://img.shields.io/badge/NumPy-Classical%20ISP-013243?logo=numpy&logoColor=white)](https://numpy.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Serverless%20API-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/atlas)
+[![Vercel](https://img.shields.io/badge/Vercel-Hosting-black?logo=vercel&logoColor=white)](https://vercel.com/)
 
-> **Status: work in progress.** The source code is in place. Model training has not finished, so
-> this repository does not yet contain trained models, evaluation results, the
-> `eval_P2_T32.md` file, the design document or a live URL. No performance numbers are claimed
-> until they are generated from the held-out test set.
+**Measure. Render. Refine. Deliver.**
 
-![System architecture](public/figures/architecture.svg)
+*A hybrid image signal processor that turns noisy smartphone Bayer RAW into faithful sRGB. Classical camera stages supply a physically meaningful render, and a compact neural network corrects only what those stages get wrong.*
 
-## What it does
+[Architecture](docs/ARCHITECTURE.md) • [Design Document](docs/DESIGN.md) • [API Reference](docs/API.md) • [Datasets](docs/DATASETS.md) • [Reproduce](docs/REPRODUCE.md) • [Deployment](docs/DEPLOYMENT.md)
 
-LumaForge turns noisy Bayer RAW into sRGB in three comparable ways:
+**Team Asphalt (T32) · Problem P2: Intelligent and Computationally Efficient Smartphone ISP**
+
+</div>
+
+> [!IMPORTANT]
+> **Project status: in progress.** The source code, calibration and documentation are in this repository. Model training has not finished, so there are no trained models, evaluation results, `eval_P2_T32.md` or live URL yet. See [Project Status](#-project-status). No quality score is claimed until it has been measured on the held-out test set.
+
+---
+
+## 📌 Table of Contents
+
+- [Overview & Problem Statement](#-overview--problem-statement)
+- [Project Status](#-project-status)
+- [System Architecture](#-system-architecture)
+- [Classical ISP Stages](#-classical-isp-stages)
+- [LumaNet: The Learned Component](#-lumanet-the-learned-component)
+- [Adaptive Processing](#-adaptive-processing)
+- [Model Optimization](#-model-optimization)
+- [Datasets](#-datasets)
+- [Findings From Calibration](#-findings-from-calibration)
+- [Evaluation Plan](#-evaluation-plan)
+- [Web Application](#-web-application)
+- [Testing & Quality](#-testing--quality)
+- [Quick Start Guide](#-quick-start-guide)
+- [Repository Layout](#-repository-layout)
+- [Requirement Coverage](#-requirement-coverage)
+- [Team](#-team)
+- [Contributing](#-contributing)
+- [License & Disclaimer](#-license--disclaimer)
+- [Acknowledgements](#-acknowledgements)
+
+---
+
+## 💡 Overview & Problem Statement
+
+### The Problem
+
+1. **Sensors capture degraded data.** A phone sensor records a noisy, colour-cast mosaic in which every pixel measures only one colour.
+2. **Conventional pipelines are rigid.** Hand-tuned stages are efficient and predictable, but they cannot restore detail well, and they degrade quickly in low light or under a white-balance error.
+3. **Pure neural ISPs are expensive and opaque.** End-to-end models must relearn the whole camera pipeline, which costs parameters, memory and latency that phones do not have. Colour can also drift, because nothing anchors it to the physics of the sensor.
+
+### The LumaForge Solution
+
+| Principle | How it is applied |
+|---|---|
+| **Physics first** | A classical pipeline renders the image, so colour and tone start from a physically meaningful result |
+| **Learn the residual** | The network predicts a global colour correction and a local residual, rather than the whole image |
+| **Measure, then adapt** | Noise is fitted from the mosaic itself, and that measurement sets each stage's strength |
+| **Spend compute only when needed** | Easy captures use a small int8 model, and hard captures use a larger fp16 model |
+| **One implementation everywhere** | The same NumPy ISP runs in training, evaluation and the deployed function, which rules out train/serve skew |
+
+Three arms are compared on identical inputs:
 
 | Arm | Method |
 |---|---|
-| Traditional | Classical ISP in pure NumPy, calibrated on the training scenes |
-| Learned | Compact U-Net mapping packed RAW directly to sRGB |
-| Hybrid | The classical render is the base layer. The network predicts a global colour correction and a local residual |
+| **Traditional** | The classical pipeline, calibrated on training scenes, so that the baseline is a fair one |
+| **Learned** | The same U-Net backbone, mapping packed RAW directly to sRGB |
+| **Hybrid** | The classical render plus LumaNet refinement |
 
-The adaptive pipeline measures noise from the mosaic itself, sets each stage's strength, and
-routes each capture to a fast int8 model or a larger fp16 model.
+---
 
-## Classical stages
+## 📍 Project Status
 
-- Bayer normalisation to RGGB, and Malvar-He-Cutler demosaicing
-- White balance: shades of grey with a per-camera prior
-- Colour correction matrix fitted per camera
-- Variance-stabilised guided filtering, plus chroma filtering in YCbCr
-- Tone curve and sRGB gamma
-- Luma-only sharpening
+| Deliverable | Status |
+|---|---|
+| Classical ISP, LumaNet, API and web application source | ✅ In this repository, not yet run end to end |
+| System architecture diagram | ✅ [`public/figures/architecture.svg`](public/figures/architecture.svg) |
+| Design document | 🟡 [`docs/DESIGN.md`](docs/DESIGN.md) records decisions so far; results to be added |
+| Data cache and camera calibration | ✅ 115 scenes processed, calibration committed |
+| Trained models | ⏳ Pending |
+| ONNX export, int8 and fp16 models | ⏳ Pending, needs trained models |
+| Comparative evaluation, `eval_P2_T32.md` | ⏳ Pending, needs trained models |
+| Ablation study and failure-case analysis | ⏳ Pending, needs trained models |
+| Live hosted application | ⏳ Pending, needs trained models |
 
-## Data
+---
 
-- **Training and testing:** [SIDD-CC](https://huggingface.co/datasets/MhdMohammadi/SIDD-CC), a
-  public re-processing of the [Smartphone Image Denoising Dataset](https://abdokamel.github.io/sidd/).
-  The official SIDD server was unreachable during this work.
-- **Architecture reference:** [Modular Neural ISP](https://github.com/SamsungLabs/modular_neural_isp)
-  (Samsung Labs). That repository contains code and no image data.
+## 🏛 System Architecture
 
-Dataset files are not stored in this repository.
-
-## Repository layout
+![LumaForge system architecture](public/figures/architecture.svg)
 
 ```text
-lumaforge/   ISP stages, network, degradations, metrics, ONNX runtime
-api/         FastAPI function for Vercel, optional MongoDB storage
-app/         Next.js pages
-components/  Interactive lab, results and telemetry views
-scripts/     Data preparation, calibration, training, export, evaluation, reporting
-tests/       Unit and API tests
+┌────────────────────────────────────────────────────────────────────────────┐
+│                               SENSOR INPUT                                 │
+│              Bayer RAW (any 2x2 CFA)  +  known digital gain                │
+└─────────────────────────────────────┬──────────────────────────────────────┘
+                                      ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                              SCENE ANALYSIS                                │
+│     Shot and read noise fit   ·   Brightness   ·   Clipped-pixel fraction  │
+└─────────────────────────────────────┬──────────────────────────────────────┘
+                                      ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│                     CLASSICAL BRANCH (NumPy, no weights)                   │
+│  Raw denoise ► White balance ► Demosaic ► CCM ► Tone ► Gamma ► Chroma      │
+└───────────────┬────────────────────────────────────────────┬───────────────┘
+                │ unsharpened render                         │ luma sharpen
+                ▼                                            ▼
+┌───────────────────────────────────────┐          ┌────────────────────────┐
+│    LEARNED BRANCH (ONNX Runtime)      │          │    TRADITIONAL OUTPUT  │
+│                                       │          │       (baseline)       │
+│  Inputs: packed RAW, noise map, render│          └────────────────────────┘
+│                 │                     │
+│        ┌────────┴────────┐            │
+│        ▼                 ▼            │
+│   LumaNet fast     LumaNet quality    │
+│   student, int8    teacher, fp16      │
+│        └────────┬────────┘            │
+│                 ▼                     │
+│  Global colour matrix + local residual│
+└─────────────────┬─────────────────────┘
+                  ▼
+           HYBRID sRGB OUTPUT
 ```
 
-## Run locally
+### Deployment
+
+```mermaid
+flowchart LR
+    B[Browser] -->|pages| N[Next.js on Vercel]
+    B -->|/api/process| F[FastAPI Python function]
+    F --> I[NumPy ISP + ONNX Runtime]
+    F -.->|optional: run metadata| M[(MongoDB Atlas)]
+```
+
+PyTorch is never deployed. Inference needs only NumPy and ONNX Runtime, which keeps the function small. The database is optional, and images are never written to it.
+
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
+## 📷 Classical ISP Stages
+
+Every stage is implemented from scratch in NumPy in [`lumaforge/isp/classical.py`](lumaforge/isp/classical.py).
+
+| # | Stage | Method | Mandatory requirement |
+|---|---|---|---|
+| 1 | Bayer preprocessing | Normalises any 2x2 CFA to RGGB, and packs to 4 planes | Bayer RAW preprocessing |
+| 2 | Raw denoising | Guided filter in a variance-stabilised space | Denoising and edge-preserving filtering |
+| 3 | White balance | Shades of grey, shrunk towards a per-camera prior | White balance correction |
+| 4 | Demosaicing | Malvar-He-Cutler gradient-corrected interpolation | Demosaicing |
+| 5 | Colour correction | Per-camera matrix fitted on training scenes | Colour correction matrix |
+| 6 | Tone mapping | Filmic curve on luminance, preserving chromaticity | Tone mapping |
+| 7 | Gamma | IEC 61966-2-1 sRGB transfer function | Gamma correction |
+| 8 | Chroma filtering | Guided filter on Cb and Cr, using luma as the guide | Colour-space transformations |
+| 9 | Sharpening | Unsharp mask on luma with a noise threshold | Image sharpening |
+
+Noise is modelled as heteroscedastic, and fitted per capture from the two green planes:
+
+$$\sigma^2(I) = a \cdot I + b$$
+
+Here $a$ is the shot-noise slope and $b$ is the read-noise floor. Filtering happens after a square-root transform, which approximately equalises noise across brightness levels.
+
+---
+
+## 🧠 LumaNet: The Learned Component
+
+LumaNet is a compact U-Net built from depthwise-separable residual blocks ([`lumaforge/models/lumanet.py`](lumaforge/models/lumanet.py)).
+
+$$\hat{y} = \left(I + \Delta M\right) \cdot r + t + R$$
+
+$r$ is the classical render, $\Delta M$ and $t$ come from a global colour head, and $R$ is the local residual. Both outputs start at zero, so training begins from the classical result and refines it.
+
+| Model | Width | Parameters | Role |
+|---|---:|---:|---|
+| LumaNet fast | 12 | 152,276 | Distilled student, default route |
+| LumaNet quality | 24 | 587,216 | Teacher, used for hard captures |
+
+The learned arm uses the same backbone at width 24, without the classical input or the colour head.
+
+**Inputs:** packed RAW after gain and square-root encoding, a per-pixel noise map, and the classical render.
+
+**Training loss:** Charbonnier, SSIM, and an L1 term in CIELAB for colour fidelity. The student adds an L1 distillation term against the teacher.
+
+**Augmentation:** physically motivated degradations in the RAW domain ([`lumaforge/degrade.py`](lumaforge/degrade.py)): underexposure with matching extra noise, added shot and read noise, and colour casts.
+
+---
+
+## 🎛 Adaptive Processing
+
+```mermaid
+flowchart TD
+    A[Bayer RAW] --> B[Fit noise model]
+    C[Known digital gain] --> D[Post-gain noise level]
+    B --> D
+    D --> E[Denoise strength]
+    D --> F[Sharpening amount]
+    D --> G{Above the noise gate?}
+    G -->|No| H[LumaNet fast, int8]
+    G -->|Yes| I[LumaNet quality, fp16]
+```
+
+Digital gain comes from capture metadata and is not estimated. SIDD references keep dark scenes dark, so a blind auto-exposure would wrongly brighten scenes that are meant to be dim. The case where this metadata is missing will be reported as a failure mode.
+
+The current noise gate of `0.02` is provisional, and is near the 90th percentile of noise in the sampled training crops. It will be finalised on validation data.
+
+---
+
+## ⚡ Model Optimization
+
+| Technique | Applied to | Purpose |
+|---|---|---|
+| **Knowledge distillation** | Fast model | Train a 152k-parameter student from the 587k-parameter teacher |
+| **Int8 static quantization** | Fast and learned models | Reduce size and CPU cost. The output head stays in float to avoid banding |
+| **Reduced precision (fp16)** | Quality model | Halve the stored weight size |
+| **Depthwise-separable blocks** | All models | Reduce operations per layer |
+
+Size, MACs, latency and peak memory will be measured by [`scripts/benchmark.py`](scripts/benchmark.py), with each measurement in a fresh process.
+
+---
+
+## 🗂 Datasets
+
+| Source | Use |
+|---|---|
+| [SIDD-CC](https://huggingface.co/datasets/MhdMohammadi/SIDD-CC) | Training, validation and testing |
+| [SIDD](https://abdokamel.github.io/sidd/) | Origin of SIDD-CC. Its download server was unreachable during this work |
+| [Modular Neural ISP](https://github.com/SamsungLabs/modular_neural_isp) | Design reference only. The repository contains code and download scripts, not images |
+
+| Split | Scenes | Size |
+|---|---:|---|
+| Train | 103 | 2,472 crops of 256 × 256 |
+| Validation | 12 | 288 crops of 256 × 256 |
+| Test (held out) | 29 | 928 blocks of 256 × 256 |
+
+The five sensors are Galaxy S6, Google Pixel, Nexus 6, LG G4 and iPhone 7. Validation scenes are chosen per camera, and the test split is never used for training or tuning.
+
+Dataset files are not stored in this repository. See [docs/DATASETS.md](docs/DATASETS.md).
+
+---
+
+## 🔬 Findings From Calibration
+
+These measurements come from training crops. They are not test results.
+
+| Finding | Evidence | Consequence |
+|---|---|---|
+| **White balance is the largest classical error** | Sampled crops: 37.1 dB and ΔE76 3.3 with the camera's as-shot white balance, against 30.2 dB and ΔE76 9.5 with plain shades-of-grey | The test split has no metadata, so white-balance robustness matters most |
+| **A per-camera prior helps** | Mean illuminant error falls from 7.3° to 4.2° at prior weight 0.8 | Added to the baseline, keeping the comparison fair |
+| **Targets have no auto-exposure** | Linear signal maps to target about 1:1, and the fitted tone curve is close to identity | Blind auto-exposure was removed |
+| **DNG colour matrices are biased here** | Red about 19% low, blue about 11% high, across cameras | Fitted matrices replaced them |
+
+---
+
+## 📊 Evaluation Plan
+
+Results will appear in `eval_P2_T32.md`, which [`scripts/make_report.py`](scripts/make_report.py) generates from raw outputs, so that no number is typed by hand.
+
+| Measure | Details |
+|---|---|
+| Fidelity | PSNR, SSIM |
+| Colour | CIEDE2000 ΔE |
+| Perceptual | LPIPS (AlexNet) |
+| Cost | Parameters, model size, MACs, latency, peak memory |
+| Confidence | 95% bootstrap intervals over scenes, not blocks |
+
+**Robustness conditions:** clean, 1 to 3 stops of low light, moderate and severe added noise, warm and cool casts, a combined severe case, and missing gain metadata.
+
+**Ablation study:** each classical stage removed in turn, and trained variants without the noise map, colour head, degradation training, colour loss, classical denoise or classical base.
+
+---
+
+## 🖥 Web Application
+
+Built with **Next.js 15**, **TypeScript** and a **FastAPI** Python function.
+
+| Page | Route | Description |
+|---|---|---|
+| **Lab** | `/` | Pick a test capture or upload an image, degrade it in the RAW domain, and compare the arms with a slider |
+| **Results** | `/results` | Evaluation tables, robustness chart, cost table and ablation study |
+| **Architecture** | `/architecture` | System diagram and the processing order |
+
+Uploaded JPEG or PNG files are not true RAW. They are converted to a simulated mosaic, the interface labels them as simulated, and they are never stored.
+
+API endpoints are documented in [docs/API.md](docs/API.md).
+
+---
+
+## 🧪 Testing & Quality
+
+```text
+pytest: 28 passed, 10 skipped
+  - tests/test_classical.py   Demosaicing, filters, colour, noise fit, routing, degradations
+  - tests/test_model.py       Identity start, variants, loss, input preparation
+  - tests/test_api.py         Skipped until exported models exist
+```
+
+GitHub Actions runs Ruff, pytest, the TypeScript check and a production build on every push to `main`.
+
+---
+
+## 🚀 Quick Start Guide
+
+### Prerequisites
+
+- Python 3.11 or newer
+- Node.js 22 and npm
+- About 30 GB of free disk space for data preparation, which shrinks to about 1 GB afterwards
+
+### 1. Install
 
 ```bash
+git clone https://github.com/Charis-E-Shiny/LumaForge.git
+cd LumaForge
+
 python -m venv .venv
-.venv/Scripts/activate        # on Linux or macOS: source .venv/bin/activate
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements-train.txt
-pytest -q
 
 npm install
-npm run build
 ```
 
-The API needs exported models in `models/`, which are produced after training.
+### 2. Run the Tests
 
-## Team
+```bash
+pytest -q
+```
+
+### 3. Reproduce the Models
+
+```bash
+python scripts/prepare_sidd_cc.py --out data/cache
+python scripts/consolidate_cache.py
+python scripts/calibrate.py
+python scripts/tune_classical.py --write
+sh scripts/run_training.sh
+python scripts/export_onnx.py
+```
+
+The full sequence, including evaluation, is in [docs/REPRODUCE.md](docs/REPRODUCE.md).
+
+### 4. Run the Application
+
+The application needs the exported models and demo samples from step 3.
+
+```bash
+# Terminal 1
+npm run dev:api
+
+# Terminal 2
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+### 5. Optional: MongoDB
+
+```bash
+cp .env.example .env.local     # then set MONGODB_URI
+```
+
+---
+
+## 📁 Repository Layout
+
+```text
+LumaForge/
+├── api/                  FastAPI function and optional MongoDB storage
+├── app/                  Next.js pages
+├── components/           Lab, comparison slider, results, telemetry
+├── docs/                 Architecture, design, API, datasets, reproduction, deployment
+├── lumaforge/            Core Python package
+│   ├── isp/              Classical stages, scene analysis, calibration
+│   ├── models/           LumaNet
+│   ├── degrade.py        RAW-domain degradations
+│   ├── hybrid.py         Shared input preparation
+│   ├── metrics.py        Evaluation metrics and losses
+│   └── runtime.py        ONNX inference
+├── public/figures/       Diagram and report figures
+├── scripts/              Data, calibration, training, export, evaluation, reporting
+├── tests/                Unit and API tests
+├── requirements.txt      Deployed function dependencies
+└── requirements-train.txt  Full development dependencies
+```
+
+---
+
+## ✅ Requirement Coverage
+
+| Requirement | Implementation | State |
+|---|---|---|
+| **A. Classical computer vision** | [`lumaforge/isp/`](lumaforge/isp/) | ✅ Implemented |
+| **B. Deep learning** | [`lumaforge/models/lumanet.py`](lumaforge/models/lumanet.py), [`scripts/train.py`](scripts/train.py) | 🟡 Implemented, training pending |
+| **C. Hybrid architecture** | [`lumaforge/hybrid.py`](lumaforge/hybrid.py), [`lumaforge/runtime.py`](lumaforge/runtime.py) | 🟡 Implemented, comparison pending |
+| Adaptive pipeline | [`lumaforge/isp/analysis.py`](lumaforge/isp/analysis.py) | 🟡 Implemented, gate to be finalised |
+| RAW-to-RGB reconstruction | Whole pipeline | 🟡 Implemented, training pending |
+| Optimization | [`scripts/export_onnx.py`](scripts/export_onnx.py) | 🟡 Script written |
+| Size, memory and latency | [`scripts/benchmark.py`](scripts/benchmark.py) | 🟡 Script written |
+| Degradation and recovery | [`scripts/evaluate.py`](scripts/evaluate.py) | 🟡 Script written |
+| Comparison with conventional baseline | [`scripts/evaluate.py`](scripts/evaluate.py) | 🟡 Script written |
+
+---
+
+## 👥 Team
+
+**Team Asphalt, T32, Problem P2**
 
 | USN |
 |---|
@@ -78,3 +424,28 @@ The API needs exported models in `models/`, which are produced after training.
 | 1RUA24CSE0111 |
 | 1RUA24CSE0114 |
 | 1RUA24CSE0098 |
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities as described in [SECURITY.md](SECURITY.md). Changes are recorded in the [Changelog](CHANGELOG.md).
+
+---
+
+## 📄 License & Disclaimer
+
+The source code is licensed under the **MIT License**. See [LICENSE](LICENSE).
+
+Datasets and third-party work keep their own terms, and are not covered by that license. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+> ⚠️ **Academic disclaimer:** LumaForge is an educational project. It is not a production camera pipeline. Test images come from a research dataset whose terms limit use, so check those terms before reusing any data.
+
+---
+
+## 🙏 Acknowledgements
+
+- A. Abdelhamed, S. Lefkimmiatis and M. S. Brown for the [Smartphone Image Denoising Dataset](https://abdokamel.github.io/sidd/)
+- The authors of [SIDD-CC](https://huggingface.co/datasets/MhdMohammadi/SIDD-CC)
+- M. Afifi, Z.-X. Wang, R. Zhang and M. S. Brown for [Modular Neural Image Signal Processing](https://github.com/SamsungLabs/modular_neural_isp)
+- Malvar, He and Cutler for demosaicing, He et al. for the guided filter, and Zhang et al. for LPIPS

@@ -25,7 +25,7 @@ from lumaforge.metrics_lite import delta_e_76, psnr
 from lumaforge.runtime import render
 from lumaforge.unprocess import unprocess
 
-app = FastAPI(title="LumaForge API", version="1.0.0", docs_url="/api/docs", openapi_url="/api/openapi.json")
+app = FastAPI(title="LumaForge API", version="0.1.0", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
 SAMPLE_DIR = ROOT / "samples"
 RESULTS_PATH = ROOT / "results" / "summary.json"
