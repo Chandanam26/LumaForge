@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+
+# Data and training outputs (see docs/REPRODUCE.md)
+data/
+checkpoints/*.pt
+logs/
+
+# Local configuration
+.env
+.env.local
+.env*.local
+.vercel/
+
+# Local tool state
+.claude/
