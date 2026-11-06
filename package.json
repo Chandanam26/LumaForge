@@ -1,6 +1,6 @@
 {
   "name": "lumaforge",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Hybrid learned smartphone ISP with a live RAW-to-RGB lab",
   "scripts": {
