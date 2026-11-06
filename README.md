@@ -445,7 +445,7 @@ Datasets and third-party work keep their own terms, and are not covered by that 
 
 ## 🙏 Acknowledgements
 
-- A. Abdelhamed, S. Lefkimmiatis and M. S. Brown for the [Smartphone Image Denoising Dataset](https://abdokamel.github.io/sidd/)
+- Abdelhamed, Lin and Brown for the [Smartphone Image Denoising Dataset](https://abdokamel.github.io/sidd/)
 - The authors of [SIDD-CC](https://huggingface.co/datasets/MhdMohammadi/SIDD-CC)
-- M. Afifi, Z.-X. Wang, R. Zhang and M. S. Brown for [Modular Neural Image Signal Processing](https://github.com/SamsungLabs/modular_neural_isp)
+- Afifi, Wang, Zhang and Brown for [Modular Neural Image Signal Processing](https://github.com/SamsungLabs/modular_neural_isp)
 - Malvar, He and Cutler for demosaicing, He et al. for the guided filter, and Zhang et al. for LPIPS
