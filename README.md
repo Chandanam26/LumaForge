@@ -24,8 +24,7 @@
 </div>
 
 > [!IMPORTANT]
-> **Project status: in progress.** The source code, calibration and documentation are in this repository. Model training has not finished, so there are no trained models, evaluation results, `eval_P2_T32.md` or live URL yet. See [Project Status](#-project-status). No quality score is claimed until it has been measured on the held-out test set.
-
+> **Project status: in progress.** The source code, training data, calibration work and documentation are available in this repository. Model training is currently in progress, but no completed trained models or final evaluation results are available yet. `eval_P2_T32.md` and the live application are also pending. See [Project Status](#-project-status). No quality score is claimed until it has been measured on the held-out test set.
 ---
 
 ## 📌 Table of Contents
@@ -88,7 +87,7 @@ Three arms are compared on identical inputs:
 | System architecture diagram | ✅ [`public/figures/architecture.svg`](public/figures/architecture.svg) |
 | Design document | 🟡 [`docs/DESIGN.md`](docs/DESIGN.md) records decisions so far; results to be added |
 | Data cache and camera calibration | ✅ 115 scenes processed, calibration committed |
-| Trained models | ⏳ Pending |
+| Trained models | ⏳ Training in progress |
 | ONNX export, int8 and fp16 models | ⏳ Pending, needs trained models |
 | Comparative evaluation, `eval_P2_T32.md` | ⏳ Pending, needs trained models |
 | Ablation study and failure-case analysis | ⏳ Pending, needs trained models |
